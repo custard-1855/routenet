@@ -170,7 +170,7 @@ class UPCDataset:
         n_links = max(max(paths))+1
         n_total = len(path_indices)
 
-        writer = tf.python_io.TFRecordWriter(tfrecords_name)
+        writer = tf.io.TFRecordWriter(tfrecords_name)
         
         for item in zip(tm,delay,jitter,drops,packets,logdelay):
             example = tf.train.Example(features=tf.train.Features(feature={

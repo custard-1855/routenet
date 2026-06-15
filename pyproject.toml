@@ -4,4 +4,18 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "tensorflow-metal>=1.2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["routenet*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "tensorflow>=2.21.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
