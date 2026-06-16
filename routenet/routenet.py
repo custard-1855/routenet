@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 from dataclasses import dataclass
 
 import numpy as np
@@ -43,8 +44,8 @@ def _parse_hparams(hparams, csv_str):
 
 
 class RouteNet(tf.keras.Model):
-    def __init__(self, hparams, output_units=1, final_activation=None):
-        super(RouteNet, self).__init__()
+    def __init__(self, hparams, output_units=1, final_activation=None, **kwargs):
+        super(RouteNet, self).__init__(**kwargs)
 
         self.hparams = hparams
         self.output_units = output_units
@@ -92,6 +93,22 @@ class RouteNet(tf.keras.Model):
         )
 
         self.built = True
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "hparams": dataclasses.asdict(self.hparams),
+            "output_units": self.output_units,
+            "final_activation": self.final_activation,
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        config = config.copy()
+        if isinstance(config["hparams"], dict):
+            config["hparams"] = HParams(**config["hparams"])
+        return cls(**config)
 
     def call(self, inputs, training=False):
         f_ = inputs
@@ -164,7 +181,28 @@ def _binomial_loss(features, labels, logits):
     ) / np.float32(1e5)
 
 
-# Step 7: Pearson correlation custom metric
+# Step 7: Custom metrics
+class MeanRelativeError(tf.keras.metrics.Metric):
+    def __init__(self, name="mean_relative_error", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.total = self.add_weight(name="total", initializer="zeros")
+        self.count = self.add_weight(name="count", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true = tf.cast(tf.reshape(y_true, [-1]), tf.float32)
+        y_pred = tf.cast(tf.reshape(y_pred, [-1]), tf.float32)
+        relative = tf.abs(tf.math.divide_no_nan(y_true - y_pred, y_true))
+        self.total.assign_add(tf.reduce_sum(relative))
+        self.count.assign_add(tf.cast(tf.size(y_true), tf.float32))
+
+    def result(self):
+        return tf.math.divide_no_nan(self.total, self.count)
+
+    def reset_state(self):
+        for v in self.variables:
+            v.assign(tf.zeros_like(v))
+
+
 class PearsonCorrelation(tf.keras.metrics.Metric):
     def __init__(self, name="pearson_correlation", **kwargs):
         super().__init__(name=name, **kwargs)
