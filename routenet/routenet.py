@@ -253,12 +253,11 @@ class DelayRouteNet(RouteNet):
 
         for metric in self.metrics:
             if metric.name == "loss":
-                continue
-            metric.update_state(labels["delay"], predictions[..., 0])
+                metric.update_state(loss)
+            else:
+                metric.update_state(labels["delay"], predictions[..., 0])
 
-        results = {m.name: m.result() for m in self.metrics}
-        results["loss"] = loss
-        return results
+        return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, data):
         features, labels = data
@@ -267,12 +266,11 @@ class DelayRouteNet(RouteNet):
 
         for metric in self.metrics:
             if metric.name == "loss":
-                continue
-            metric.update_state(labels["delay"], predictions[..., 0])
+                metric.update_state(loss)
+            else:
+                metric.update_state(labels["delay"], predictions[..., 0])
 
-        results = {m.name: m.result() for m in self.metrics}
-        results["loss"] = loss
-        return results
+        return {m.name: m.result() for m in self.metrics}
 
 
 # Step 5: drop_model_fn → Keras subclass
@@ -287,14 +285,24 @@ class DropRouteNet(RouteNet):
 
         grads = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-        return {"loss": loss}
+
+        for metric in self.metrics:
+            if metric.name == "loss":
+                metric.update_state(loss)
+
+        return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, data):
         features, labels = data
         logits = self(features, training=False)
         logits = tf.squeeze(logits, axis=-1)
         loss = _binomial_loss(features, labels, logits)
-        return {"loss": loss}
+
+        for metric in self.metrics:
+            if metric.name == "loss":
+                metric.update_state(loss)
+
+        return {m.name: m.result() for m in self.metrics}
 
 
 def scale_fn(k, val):

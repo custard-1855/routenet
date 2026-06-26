@@ -20,7 +20,13 @@ from pathlib import Path
 
 import tensorflow as tf
 
-from routenet.routenet import HParams, DelayRouteNet, MeanRelativeError, PearsonCorrelation, tfrecord_input_fn
+from routenet.routenet import (
+    DelayRouteNet,
+    HParams,
+    MeanRelativeError,
+    PearsonCorrelation,
+    tfrecord_input_fn,
+)
 
 # ── 設定 ──────────────────────────────────────────────────────────────
 DATA_DIR = Path("data")
@@ -53,6 +59,7 @@ MODEL_DIR_FULL = Path("models") / "delay_full"
 
 # ── ステップ 1: ダウンロード ──────────────────────────────────────────
 
+
 def test_01_download():
     """NSFNet データセットを KDN からダウンロード（~900 MB）。"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,6 +82,7 @@ def test_01_download():
 
 # ── ステップ 2: 展開 ─────────────────────────────────────────────────
 
+
 def test_02_extract():
     """アーカイブから TFRecords を展開する。"""
     assert DATASET_ARCHIVE.exists(), (
@@ -84,7 +92,9 @@ def test_02_extract():
 
     existing = list(DATA_DIR.rglob("*.tfrecords"))
     if existing:
-        print(f"\nskip — {len(existing)} 件の .tfrecords が既に {DATA_DIR}/ 以下に存在します")
+        print(
+            f"\nskip — {len(existing)} 件の .tfrecords が既に {DATA_DIR}/ 以下に存在します"
+        )
         return
 
     with tarfile.open(DATASET_ARCHIVE, "r:gz") as tar:
@@ -98,6 +108,7 @@ def test_02_extract():
 
 
 # ── ステップ 3: 訓練 ─────────────────────────────────────────────────
+
 
 def test_03_train():
     """DelayRouteNet を NSFNet TFRecords で訓練する。"""
@@ -151,6 +162,7 @@ def test_03_train():
 
 
 # ── ステップ 4: 評価 ─────────────────────────────────────────────────
+
 
 def test_04_evaluate():
     """訓練済みモデルを eval データで評価する（MAE・Pearson ρ）。"""
@@ -211,9 +223,11 @@ def test_04_evaluate():
 
 # ── ステップ 5: 相対誤差の CDF ───────────────────────────────────────
 
+
 def test_05_cdf():
     """相対誤差の累積分布関数をプロットして保存する。"""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
@@ -271,6 +285,7 @@ def test_05_cdf():
 
 # ── ステップ 6: 論文レベル訓練 ────────────────────────────────────────
 
+
 def test_06_train_full():
     """論文レベルのハイパーパラメータで DelayRouteNet を訓練する。
 
@@ -306,7 +321,9 @@ def test_06_train_full():
     # run_eagerly=True: Metal GPU の while_loop グラフコンパイルバグを回避
     model.compile(optimizer=tf.keras.optimizers.Adam(lr), run_eagerly=True)
 
-    train_ds = tfrecord_input_fn(train_files, HPARAMS_FULL, shuffle_buf=SHUFFLE_BUF_FULL)
+    train_ds = tfrecord_input_fn(
+        train_files, HPARAMS_FULL, shuffle_buf=SHUFFLE_BUF_FULL
+    )
     eval_ds = tfrecord_input_fn(eval_files, HPARAMS_FULL, shuffle_buf=None)
 
     model.fit(
@@ -337,6 +354,7 @@ def test_06_train_full():
 
 
 # ── ステップ 7: 論文レベルモデルの評価 ───────────────────────────────
+
 
 def test_07_evaluate_full():
     """test_06_train_full で訓練したモデルを評価する（MAE・MRE・Pearson ρ）。"""
@@ -397,9 +415,11 @@ def test_07_evaluate_full():
 
 # ── ステップ 9: 論文レベルモデルの相対誤差 CDF ───────────────────────
 
+
 def test_09_cdf_full():
     """test_06_train_full で訓練したモデルの相対誤差 CDF をプロットして保存する。"""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
@@ -455,7 +475,214 @@ def test_09_cdf_full():
     print(f"[-1,1] 外の割合: {np.mean(np.abs(rel_errors) > 1):.3f}")
 
 
+# ── GBN データ設定 ────────────────────────────────────────────────────
+GBN_URL = "https://knowledgedefinednetworking.org/data/datasets_v1/gbnbw.tar.gz"
+GBN_ARCHIVE = DATA_DIR / "gbn.tar.gz"
+GBN_DIR = DATA_DIR / "gbnbw"
+
+
+# ── ステップ 10: GBN ダウンロード ──────────────────────────────────────
+
+
+def test_10_download_gbn():
+    """GBN (17 ノード) データセットを KDN からダウンロード。"""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if GBN_ARCHIVE.exists():
+        mb = GBN_ARCHIVE.stat().st_size / 1e6
+        print(f"\nskip — already exists: {GBN_ARCHIVE} ({mb:.0f} MB)")
+        return
+
+    print(f"\ndownloading {GBN_URL} ...")
+
+    def _progress(count, block, total):
+        if total > 0:
+            print(f"\r  {count * block / total * 100:.1f}%", end="", flush=True)
+
+    urllib.request.urlretrieve(GBN_URL, GBN_ARCHIVE, reporthook=_progress)
+    mb = GBN_ARCHIVE.stat().st_size / 1e6
+    print(f"\nsaved → {GBN_ARCHIVE} ({mb:.0f} MB)")
+
+
+# ── ステップ 11: GBN 展開 ─────────────────────────────────────────────
+
+
+def test_11_extract_gbn():
+    """GBN アーカイブから TFRecords を展開する。"""
+    assert GBN_ARCHIVE.exists(), (
+        f"{GBN_ARCHIVE} が見つかりません。先に download_gbn を実行してください:\n"
+        f"  uv run pytest tasks/ -s -k download_gbn"
+    )
+
+    existing = list(GBN_DIR.rglob("*.tfrecords")) if GBN_DIR.exists() else []
+    if existing:
+        print(
+            f"\nskip — {len(existing)} 件の .tfrecords が既に {GBN_DIR}/ 以下に存在します"
+        )
+        return
+
+    with tarfile.open(GBN_ARCHIVE, "r:gz") as tar:
+        members = [m for m in tar.getmembers() if ".tfrecords" in m.name]
+        print(f"\n{len(members)} 件の tfrecords を展開中 ...")
+        tar.extractall(DATA_DIR, members=members, filter="data")
+
+    train_n = len([p for p in GBN_DIR.rglob("*.tfrecords") if "train" in str(p)])
+    eval_n = len([p for p in GBN_DIR.rglob("*.tfrecords") if "evaluat" in str(p)])
+    print(f"train: {train_n} 件  eval: {eval_n} 件")
+
+
+# ── ステップ 12: GBN 評価（スモークモデル） ───────────────────────────
+
+
+def test_12_evaluate_gbn():
+    """NSFNet で訓練したスモークモデルを GBN (17 ノード) で評価する。
+
+    NSFNet (14 ノード) → GBN (17 ノード) のクロストポロジー汎化性能を確認する。
+    """
+    ckpt = MODEL_DIR / "ckpt.keras"
+    assert ckpt.exists(), (
+        f"{ckpt} が見つかりません。先に train を実行してください:\n"
+        f"  uv run pytest tasks/ -s -k train"
+    )
+
+    assert GBN_DIR.exists(), (
+        f"{GBN_DIR} が見つかりません。先に extract_gbn を実行してください:\n"
+        f"  uv run pytest tasks/ -s -k extract_gbn"
+    )
+
+    gbn_eval_files = sorted(
+        str(p) for p in GBN_DIR.rglob("*.tfrecords") if "evaluat" in str(p)
+    )
+    if not gbn_eval_files:
+        gbn_eval_files = sorted(str(p) for p in GBN_DIR.rglob("*.tfrecords"))
+    assert gbn_eval_files, (
+        f"GBN tfrecords が {GBN_DIR} 以下に見つかりません。"
+        f"先に extract_gbn を実行してください:\n  uv run pytest tasks/ -s -k extract_gbn"
+    )
+    print(f"\ngbn eval: {len(gbn_eval_files)} 件")
+
+    model = tf.keras.models.load_model(
+        str(ckpt),
+        custom_objects={"DelayRouteNet": DelayRouteNet, "HParams": HParams},
+    )
+
+    eval_ds = tfrecord_input_fn(gbn_eval_files, HPARAMS, shuffle_buf=None)
+
+    mae = tf.keras.metrics.MeanAbsoluteError()
+    mre = MeanRelativeError()
+    rho = PearsonCorrelation()
+    n_samples = 0
+
+    for features, labels in eval_ds.take(VALIDATION_STEPS):
+        preds = model(features, training=False)
+        delay_pred = preds[..., 0]
+        mae.update_state(labels["delay"], delay_pred)
+        mre.update_state(labels["delay"], delay_pred)
+        rho.update_state(labels["delay"], delay_pred)
+        n_samples += int(labels["delay"].shape[0])
+
+    results = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "topology": "GBN",
+        "n_nodes": 17,
+        "trained_on": "NSFNet",
+        "model": "smoke",
+        "eval_files": len(gbn_eval_files),
+        "validation_steps": VALIDATION_STEPS,
+        "n_samples": n_samples,
+        "mae": float(mae.result().numpy()),
+        "mre": float(mre.result().numpy()),
+        "pearson_rho": float(rho.result().numpy()),
+    }
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    out = MODEL_DIR / "eval_results_gbn.json"
+    out.write_text(json.dumps(results, indent=2))
+
+    print(f"サンプル数: {results['n_samples']}")
+    print(f"MAE:       {results['mae']:.4f}")
+    print(f"MRE:       {results['mre']:.4f}")
+    print(f"Pearson ρ: {results['pearson_rho']:.4f}")
+    print(f"保存先 → {out}")
+
+
+# ── ステップ 13: GBN 評価（論文レベルモデル） ─────────────────────────
+
+
+def test_13_evaluate_gbn_full():
+    """NSFNet で訓練した論文レベルモデルを GBN (17 ノード) で評価する。
+
+    NSFNet (14 ノード) → GBN (17 ノード) のクロストポロジー汎化性能を確認する。
+    """
+    ckpt = MODEL_DIR_FULL / "ckpt.keras"
+    assert ckpt.exists(), (
+        f"{ckpt} が見つかりません。先に train_full を実行してください:\n"
+        f"  uv run pytest tasks/ -s -k train_full"
+    )
+
+    assert GBN_DIR.exists(), (
+        f"{GBN_DIR} が見つかりません。先に extract_gbn を実行してください:\n"
+        f"  uv run pytest tasks/ -s -k extract_gbn"
+    )
+
+    gbn_eval_files = sorted(
+        str(p) for p in GBN_DIR.rglob("*.tfrecords") if "evaluat" in str(p)
+    )
+    if not gbn_eval_files:
+        gbn_eval_files = sorted(str(p) for p in GBN_DIR.rglob("*.tfrecords"))
+    assert gbn_eval_files, (
+        f"GBN tfrecords が {GBN_DIR} 以下に見つかりません。"
+        f"先に extract_gbn を実行してください:\n  uv run pytest tasks/ -s -k extract_gbn"
+    )
+    print(f"\ngbn eval: {len(gbn_eval_files)} 件")
+
+    model = tf.keras.models.load_model(
+        str(ckpt),
+        custom_objects={"DelayRouteNet": DelayRouteNet, "HParams": HParams},
+    )
+
+    eval_ds = tfrecord_input_fn(gbn_eval_files, HPARAMS_FULL, shuffle_buf=None)
+
+    mae = tf.keras.metrics.MeanAbsoluteError()
+    mre = MeanRelativeError()
+    rho = PearsonCorrelation()
+    n_samples = 0
+
+    for features, labels in eval_ds.take(VALIDATION_STEPS_FULL):
+        preds = model(features, training=False)
+        delay_pred = preds[..., 0]
+        mae.update_state(labels["delay"], delay_pred)
+        mre.update_state(labels["delay"], delay_pred)
+        rho.update_state(labels["delay"], delay_pred)
+        n_samples += int(labels["delay"].shape[0])
+
+    results = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "topology": "GBN",
+        "n_nodes": 17,
+        "trained_on": "NSFNet",
+        "model": "full",
+        "eval_files": len(gbn_eval_files),
+        "validation_steps": VALIDATION_STEPS_FULL,
+        "n_samples": n_samples,
+        "mae": float(mae.result().numpy()),
+        "mre": float(mre.result().numpy()),
+        "pearson_rho": float(rho.result().numpy()),
+    }
+
+    MODEL_DIR_FULL.mkdir(parents=True, exist_ok=True)
+    out = MODEL_DIR_FULL / "eval_results_gbn.json"
+    out.write_text(json.dumps(results, indent=2))
+
+    print(f"サンプル数: {results['n_samples']}")
+    print(f"MAE:       {results['mae']:.4f}")
+    print(f"MRE:       {results['mre']:.4f}")
+    print(f"Pearson ρ: {results['pearson_rho']:.4f}")
+    print(f"保存先 → {out}")
+
+
 # ── ステップ 8: バッチサイズ比較スモーク ─────────────────────────────
+
 
 def test_08_smoke_batch_size():
     """batch_size=32 vs 128 の epoch 時間を比較する（各 5 epoch）。
@@ -508,4 +735,6 @@ def test_08_smoke_batch_size():
 
     bs32, bs128 = results[32], results[128]
     speedup = bs32 / bs128
-    print(f"\nbatch_size=128 は batch_size=32 の {speedup:.2f}x {'速い' if speedup > 1 else '遅い'}")
+    print(
+        f"\nbatch_size=128 は batch_size=32 の {speedup:.2f}x {'速い' if speedup > 1 else '遅い'}"
+    )

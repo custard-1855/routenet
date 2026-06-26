@@ -15,6 +15,7 @@ include = ["routenet*"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.0",
+    "setuptools<82",
     "tensorflow==2.17.0",
 ]
 
